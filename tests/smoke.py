@@ -2,6 +2,7 @@
 Run: python tests/smoke.py [path/to/php]
 """
 import http.cookiejar
+import json
 import os
 from pathlib import Path
 import re
@@ -76,6 +77,47 @@ def main():
                 assert browser.request('/guestbook.php')[0] == 405
                 assert browser.request('/guestbook.php', {'name': 'no csrf', 'body': 'x'})[0] == 403
                 token = browser.token()
+                assert browser.request('/terminal.php')[0] == 200
+                assert browser.request('/terminal-api.php')[0] == 405
+                assert browser.request('/terminal-api.php', {'command': 'whoami'})[0] == 403
+                def terminal(command='', key='', client=browser, csrf=token):
+                    status, body, _ = client.request('/terminal-api.php', {'csrf': csrf, 'command': command, 'key': key})
+                    assert status == 200, (status, body)
+                    return json.loads(body)
+                assert terminal()['cols'] == 80 and terminal()['rows'] == 24
+                assert terminal('whoami')['output'] == 'guest'
+                assert terminal('pwd')['output'] == '/home/guest'
+                assert 'programs/' in terminal('ls')['output']
+                assert 'Welcome' in terminal('cat readme.txt')['output']
+                assert 'no such' in terminal('cat /etc/passwd')['output']
+                assert 'no such' in terminal('cat ../../app/bootstrap.php')['output']
+                assert 'no such' in terminal('cd ../../../')['output']
+                assert terminal('pwd')['output'] == '/home/guest'
+                assert 'command not found' in terminal('system whoami')['output']
+                assert terminal('echo hello; whoami')['output'] == 'hello; whoami'
+                assert terminal('echo "hello world"')['output'] == 'hello world'
+                terminal('note private-session-text')
+                assert 'private-session-text' in terminal('cat notes.txt')['output']
+                other = Browser(browser.base)
+                other_token = other.token()
+                assert 'private-session-text' not in terminal('cat notes.txt', client=other, csrf=other_token)['output']
+                terminal('cd programs')
+                assert '~/programs$' in terminal('pwd')['prompt']
+                assert 'Hello, friend!' in terminal('./hello friend')['output']
+                tui = terminal('./bread')
+                assert tui['mode'] == 'tui' and tui['screen']
+                assert len(tui['output'].splitlines()) == 23
+                assert all(len(row) <= 80 for row in tui['output'].splitlines())
+                terminal(key='ArrowDown')
+                assert 'Butter toast is freshly baked!' in terminal(key='Enter')['output']
+                assert terminal(key='q')['mode'] == 'shell'
+                assert terminal('clear')['clear']
+                assert terminal('exit')['exit']
+                assert terminal('reset')['clear']
+                assert terminal('pwd')['output'] == '/home/guest'
+                assert 'private-session-text' not in terminal('cat notes.txt')['output']
+                assert browser.request('/terminal-api.php', {'csrf': token, 'command': 'x' * 4097})[0] == 422
+                assert browser.request('/terminal-api.php', {'csrf': token, 'key': 'exec'})[0] == 422
                 assert browser.request('/admin.php', {'csrf': token, 'action': 'save', 'title': 'unauthorized', 'body': 'x'})[0] == 403
                 status, body, _ = browser.request('/guestbook.php', {'csrf': token, 'name': ['a', 'b'], 'body': ''})
                 assert status == 200 and '1~40' in body
@@ -125,7 +167,7 @@ def main():
                     assert '아이디 또는 비밀번호' in browser.request('/admin.php', {'csrf': new_token, 'action': 'login', 'username': 'breadkeeper', 'password': 'wrong'})[1]
                 assert browser.request('/admin.php', {'csrf': new_token, 'action': 'login', 'username': 'breadkeeper', 'password': password})[0] == 429
                 con.close()
-                print('PASS: setup, security headers/config, private paths, CSRF, auth, session rotation/revocation, diary CRUD, escaping, moderation, pagination, guest/login rate limits')
+                print('PASS: backend regression + terminal commands, session isolation, traversal/injection rejection, 80x24 TUI events, reset, validation, CSRF')
             finally:
                 server.terminate()
                 server.wait(timeout=10)
