@@ -1,0 +1,23 @@
+# Replace hostname, certificate paths and socket. Requires SSL and proxy_fcgi.
+# Install config/php.ini as an FPM ini fragment and restart all FPM workers.
+<VirtualHost *:80>
+    ServerName breadnet.example
+    Redirect permanent / https://breadnet.example/
+</VirtualHost>
+<VirtualHost *:443>
+    ServerName breadnet.example
+    DocumentRoot /srv/breadnet/public
+    SSLEngine on
+    SSLCertificateFile /etc/letsencrypt/live/breadnet.example/fullchain.pem
+    SSLCertificateKeyFile /etc/letsencrypt/live/breadnet.example/privkey.pem
+    <Directory /srv/breadnet/public>
+        Require all granted
+        AllowOverride None
+        Options -Indexes -ExecCGI
+        DirectoryIndex index.php
+    </Directory>
+    <FilesMatch "\.php$">
+        SetHandler "proxy:unix:/run/php/php8.5-fpm.sock|fcgi://localhost/"
+    </FilesMatch>
+    LimitRequestBody 1048576
+</VirtualHost>
