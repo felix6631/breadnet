@@ -14,13 +14,8 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from runtime import ROOT, php_command
 
-ROOT = Path(__file__).resolve().parents[1]
-local = ROOT / '.runtime/php/php.exe'
-php = [sys.argv[1] if len(sys.argv) > 1 else str(local) if local.exists() else 'php',
-       '-c', str(ROOT / 'config/php.ini')]
-if local.exists() and Path(php[0]).resolve() == local.resolve():
-    php += ['-d', f'extension_dir={local.parent / "ext"}', '-d', 'extension=pdo_sqlite', '-d', 'extension=mbstring']
 
 
 class Browser:
@@ -44,7 +39,13 @@ class Browser:
 
 
 def main():
+    if not __debug__:
+        raise RuntimeError('Run smoke.py without -O or PYTHONOPTIMIZE; assertions are required.')
+    php = php_command(sys.argv[1] if len(sys.argv) > 1 else None)
     with tempfile.TemporaryDirectory(prefix='breadnet-test-') as temporary:
+        sessions = Path(temporary) / 'sessions'
+        sessions.mkdir()
+        php += ['-d', f'session.save_path={sessions}']
         env = dict(os.environ, BREADNET_DB=str(Path(temporary) / 'test.sqlite'))
         setup = subprocess.run(php + [str(ROOT / 'bin/setup.php')], env=env, capture_output=True, text=True, check=True)
         password = re.search(r'Password: (\w+)', setup.stdout).group(1)
@@ -126,9 +127,17 @@ def main():
                 assert browser.request('/admin.php', {'csrf': new_token, 'action': 'login', 'username': 'breadkeeper', 'password': password})[0] == 429
                 con.close()
                 print('PASS: setup, security headers/config, private paths, CSRF, auth, session rotation/revocation, diary CRUD, escaping, moderation, pagination, guest/login rate limits')
+            except BaseException:
+                log.flush()
+                print('PHP server log:\n' + Path(log.name).read_text(encoding='utf-8', errors='replace'), file=sys.stderr)
+                raise
             finally:
                 server.terminate()
-                server.wait(timeout=10)
+                try:
+                    server.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    server.kill()
+                    server.wait(timeout=5)
 
 
 if __name__ == '__main__':

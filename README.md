@@ -74,7 +74,30 @@ tests/         임시 DB를 사용하는 HTTP 통합 테스트
 
 관리 화면은 일기 최근 50개, 방명록 승인 대기 우선 50개를 표시합니다. 대규모 관리용 검색과 페이지 이동은 아직 없습니다. 방명록 검증 오류 시 원래 입력은 보존하지 않습니다.
 
-## 검증
+## 개발 하네스
+
+Python 표준 라이브러리만으로 환경 점검, 문법 검사, 기존 HTTP 통합 테스트를 실행합니다.
+Mac/Linux에서는 `python3`, Windows에서는 `python`을 사용하세요.
+
+```sh
+python3 bin/harness.py doctor
+python3 bin/harness.py check
+python3 bin/harness.py dev --port 8000
+```
+
+`check`는 PHP 버전·필수 확장·ini 점검, PHP/Python 문법 검사, HTTP 통합 테스트 순서로
+실행하며 실패하면 0이 아닌 종료 코드를 반환합니다. `lint`와 `test`로 개별 실행도 가능합니다.
+PHP 경로는 각 명령의 `--php /path/to/php` 또는 `BREADNET_PHP` 환경변수로 지정합니다.
+Windows의 `.runtime/php/php.exe`가 있으면 자동으로 선택합니다.
+
+`dev`는 임시 DB와 세션 저장소를 만들고 루프백에서만 실행합니다. 시작할 때 표시되는
+관리자 비밀번호로 로그인하세요. Ctrl+C로 종료하면 임시 데이터도 삭제됩니다.
+기존 `BREADNET_DB` 값은 사용하지 않으므로 실제 DB를 변경하지 않습니다.
+데이터를 보존하는 개발은 위의 기존 초기화·실행 명령을 사용하세요.
+
+에이전트 작업 지침과 코드 읽기 순서는 [AGENTS.md](AGENTS.md)에 정리했습니다.
+
+## HTTP 통합 테스트
 
 Python 표준 라이브러리만 사용합니다. 별도 임시 DB를 만들어 실제 데이터는 변경하지 않습니다.
 

@@ -2,3 +2,5 @@
 !/var/.gitkeep
 /.runtime/
 *.sqlite*
+__pycache__/
+*.py[cod]
